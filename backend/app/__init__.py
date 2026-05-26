@@ -1,0 +1,2 @@
+"""Yojaka backend package."""
+

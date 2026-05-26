@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: yojaka-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: CORS_ORIGIN_REGEX
+        sync: false
