@@ -1224,7 +1224,7 @@ class DebateManager:
         return self.db.get_session_settings(session_id) or {}
 
     def _active_debate_agents(self, session_settings: dict[str, Any]) -> list[dict[str, Any]]:
-        debaters_per_team = max(1, min(4, int(session_settings.get("debaters_per_team", 2))))
+        debaters_per_team = max(1, min(4, int(session_settings.get("debaters_per_team", 1))))
         active_role_defs = [
             role_definition
             for role_definition in TEAM_ROLE_DEFINITIONS
@@ -1249,9 +1249,9 @@ class DebateManager:
         return agents
 
     def _debate_flow(self, session_settings: dict[str, Any]) -> list[dict[str, Any]]:
-        debaters_per_team = max(1, min(4, int(session_settings.get("debaters_per_team", 2))))
-        debate_rounds = max(1, min(6, int(session_settings.get("debate_rounds", 2))))
-        cap = max(1, min(4, int(session_settings.get("discussion_messages_per_team", 3))))
+        debaters_per_team = max(1, min(4, int(session_settings.get("debaters_per_team", 1))))
+        debate_rounds = max(1, min(6, int(session_settings.get("debate_rounds", 1))))
+        cap = max(1, min(4, int(session_settings.get("discussion_messages_per_team", 2))))
         agents = self._active_debate_agents(session_settings)
         lookup = {agent["role"]: agent for agent in agents}
         phases: list[dict[str, Any]] = []
@@ -1790,7 +1790,7 @@ class DebateManager:
         return payload
 
     def _judge_assistant_enabled(self, session_settings: dict[str, Any]) -> bool:
-        return bool(session_settings.get("judge_assistant_enabled", True))
+        return bool(session_settings.get("judge_assistant_enabled", False))
 
     def _auto_model_pool(
         self, preferred: SupportedModel, all_available: list[SupportedModel]
@@ -2484,7 +2484,7 @@ class DebateManager:
         cost_tracker: CostTracker | None,
     ) -> None:
         council_settings = self._council_settings_snapshot()
-        depth = str(council_settings.get("debate_intelligence_depth", "Normal"))
+        depth = str(council_settings.get("debate_intelligence_depth", "Light"))
         # Pro and Con teams prepare their notebooks simultaneously — neither side
         # knows what the other is planning, which is exactly how real prep works.
         await asyncio.gather(

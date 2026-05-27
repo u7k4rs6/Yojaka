@@ -57,13 +57,18 @@ function ArenaPanel({ assignments, transcript, streamingMsgId, activeSpeaker, st
           <EmptyArena />
         ) : (
           <div key={tearKey} className="sm-tear">
-            <div className="col gap-4" style={{ maxWidth: 920, margin: "0 auto" }}>
-              {transcript.map((msg, i) => (
-                <MessageBlock
-                  key={msg.id}
-                  message={msg}
-                  streaming={msg.id === streamingMsgId}
-                />
+            <div className="col gap-0" style={{ maxWidth: 920, margin: "0 auto" }}>
+              {groupByRound(transcript).map((group, gi) => (
+                <div key={gi} className="col gap-0">
+                  <RoundDivider label={group.label} index={gi} />
+                  {group.messages.map((msg) => (
+                    <MessageBlock
+                      key={msg.id}
+                      message={msg}
+                      streaming={msg.id === streamingMsgId}
+                    />
+                  ))}
+                </div>
               ))}
               {status === "running" && !streamingMsgId && (
                 <PendingCompose nextSpeaker="NEXT DEBATER" />
@@ -81,6 +86,75 @@ function ArenaPanel({ assignments, transcript, streamingMsgId, activeSpeaker, st
         sessionSettings={sessionSettings}
         onDispatch={onDispatch}
       />
+    </div>
+  );
+}
+
+// Group consecutive messages by "round" — a round boundary happens when
+// the phase kind resets back to constructive/opening, or when phaseIndex
+// drops. Falls back to grouping every ~4 messages if no phase metadata.
+function groupByRound(transcript) {
+  if (!transcript.length) return [];
+
+  const OPENING_KINDS = new Set(["constructive", "opening", "evidence"]);
+  const groups = [];
+  let current = null;
+  let roundNum = 0;
+  let lastPhaseIndex = -1;
+
+  for (const msg of transcript) {
+    const kind  = msg.phaseKind || "";
+    const idx   = msg.phaseIndex;
+    const isNeu = msg.side === "NEU" || msg.side === "SYS";
+
+    // Judge / assistant messages get their own group
+    if (isNeu) {
+      if (current) groups.push(current);
+      roundNum++;
+      const roleLabel = (msg.role || "").toLowerCase();
+      const label = roleLabel.includes("judge assistant") ? "JUDGE ASSISTANT AUDIT"
+        : roleLabel.includes("trainer") ? "DEBATE TRAINER"
+        : "VERDICT";
+      current = { label, messages: [msg] };
+      lastPhaseIndex = idx ?? lastPhaseIndex;
+      continue;
+    }
+
+    // New round when: phase index resets/drops, or opening kind seen after first group
+    const phaseReset = idx !== null && idx < lastPhaseIndex;
+    const openingAfterStart = OPENING_KINDS.has(kind) && groups.length > 0 && current && current.messages.length > 0;
+    const needsNewGroup = !current || phaseReset || openingAfterStart;
+
+    if (needsNewGroup) {
+      if (current) groups.push(current);
+      roundNum++;
+      const kindLabel = kind === "constructive" ? "OPENING STATEMENTS"
+        : kind === "evidence" ? "EVIDENCE"
+        : kind === "cross_exam" ? "CROSS-EXAMINATION"
+        : kind === "rebuttal" ? "REBUTTAL"
+        : kind === "closing" ? "CLOSING STATEMENTS"
+        : kind === "discussion" || kind === "answer_rebuttal" ? `ROUND ${roundNum}`
+        : `ROUND ${roundNum}`;
+      current = { label: kindLabel, messages: [msg] };
+    } else {
+      current.messages.push(msg);
+    }
+    lastPhaseIndex = idx ?? lastPhaseIndex;
+  }
+  if (current) groups.push(current);
+  return groups;
+}
+
+function RoundDivider({ label, index }) {
+  return (
+    <div className="row items-center gap-3" style={{
+      padding: "20px 0 10px",
+      marginTop: index === 0 ? 0 : 12,
+    }}>
+      <span style={{ flex: "0 0 auto", fontSize: 9, letterSpacing: "0.22em", color: "var(--bone-4)", fontWeight: 600 }}>
+        {label}
+      </span>
+      <span style={{ flex: 1, height: "0.5px", background: "var(--hair)" }} />
     </div>
   );
 }
@@ -261,21 +335,27 @@ function MessageBlock({ message, streaming }) {
       borderBottom: "0.5px solid var(--hair)",
     }}>
       <header className="row items-center justify-between gap-3" style={{ marginBottom: 10 }}>
-        <div className="row items-center gap-3">
-          <span className={isPro ? "" : "hot"} style={{ fontSize: 11, letterSpacing: "0.16em", fontWeight: 600 }}>
-            {message.side} · {message.role}
+        <div className="row items-center gap-2">
+          {/* Team pill */}
+          <span style={{
+            fontSize: 9, letterSpacing: "0.22em", fontWeight: 700,
+            padding: "2px 6px",
+            color: isPro ? "var(--bone)" : "var(--orange)",
+            border: `0.5px solid ${isPro ? "var(--hair-hot)" : "var(--orange-dim)"}`,
+            background: isPro ? "rgba(232,230,223,0.06)" : "rgba(255,78,0,0.08)",
+          }}>
+            {message.side}
           </span>
-          <span className="bone" style={{ fontSize: 12, letterSpacing: "0.04em" }}>{message.speaker}</span>
-          {message.phaseTitle && (
-            <span className="mono-mini bone-3">{message.phaseTitle}</span>
-          )}
+          <span className="bone" style={{ fontSize: 12, letterSpacing: "0.04em", fontWeight: 500 }}>{message.speaker}</span>
+          <span className={`mono-mini ${isPro ? "bone-3" : ""}`} style={{ fontSize: 9, letterSpacing: "0.14em", color: isPro ? "var(--bone-3)" : "var(--orange-dim)" }}>
+            {message.role}
+          </span>
         </div>
         <div className="row items-center gap-3">
           <span className="mono-mini bone-3">{message.time}</span>
-          <span className="mono-mini bone-3">#{String(message.seq).padStart(3, "0")}</span>
           {streaming && (
             <span className="sm-tag sm-tag--hot" style={{ animation: "cursor-blink 1.1s step-end infinite" }}>
-              STREAMING
+              LIVE
             </span>
           )}
         </div>

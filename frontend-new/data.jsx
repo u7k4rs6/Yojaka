@@ -89,8 +89,10 @@ function mapBackendMessage(msg, index) {
     time,
     body:       msg.content || "",
     citations:  [],
-    phase:      msg.phase_key  || "",
+    phase:      msg.phase_key   || "",
     phaseTitle: msg.phase_title || "",
+    phaseKind:  msg.phase_kind  || "",
+    phaseIndex: typeof msg.phase_index === "number" ? msg.phase_index : null,
   };
 }
 
