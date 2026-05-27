@@ -20,6 +20,11 @@ class Settings:
     request_timeout_seconds = int(os.getenv("LITELLM_TIMEOUT_SECONDS", "120"))
     mock_llm = os.getenv("MOCK_LLM_RESPONSES", "false").lower() == "true"
 
+    # Efficiency caps — keep debates fast and cheap
+    session_token_budget: int = int(os.getenv("SESSION_TOKEN_BUDGET", "40000"))
+    max_agent_output_tokens: int = int(os.getenv("MAX_AGENT_OUTPUT_TOKENS", "400"))
+    context_window_turns: int = int(os.getenv("CONTEXT_WINDOW_TURNS", "6"))
+
     @property
     def database_path(self) -> Path:
         raw_path = os.getenv("DATABASE_PATH", "backend/data/debate_council.db")

@@ -186,6 +186,29 @@ class ClientDisconnectedError(DebateError):
     pass
 
 
+class BudgetExceeded(DebateError):
+    pass
+
+
+class SessionBudget:
+    """Hard per-debate token cap. Uses the same estimate_tokens already in costing.py."""
+
+    def __init__(self, cap: int = 0) -> None:
+        self.cap = cap or settings.session_token_budget
+        self.used = 0
+
+    def charge(self, text_out: str) -> None:
+        self.used += estimate_tokens(text_out)
+
+    @property
+    def exhausted(self) -> bool:
+        return self.used >= self.cap
+
+    def can_afford(self, reserve_out: int | None = None) -> bool:
+        out = reserve_out if reserve_out is not None else settings.max_agent_output_tokens
+        return self.used + out < self.cap
+
+
 class DebateManager:
     def __init__(self, db: Database):
         self.db = db
@@ -384,6 +407,10 @@ class DebateManager:
 
         flow = self._debate_flow(opening_settings)
         transcript: list[dict[str, Any]] = []
+        session_budget = SessionBudget()
+        utility_model = self._cheap_utility_model(selected_model)
+        discussion_turns_done = 0
+        early_stop_reason: str | None = None
         latest_analysis = self._with_phase_metadata(
             analyze_debate(cleaned_topic, transcript),
             flow=flow,
@@ -393,6 +420,10 @@ class DebateManager:
         try:
             clusters = self._group_parallel_phases(flow)
             for cluster in clusters:
+                if session_budget.exhausted:
+                    early_stop_reason = "budget_exhausted"
+                    break
+
                 snapshot = list(transcript)  # each cluster starts from the same state
                 if len(cluster) == 1:
                     # Sequential phase — passes the live transcript so it sees
@@ -416,6 +447,7 @@ class DebateManager:
                         phase=phase,
                         content=turn["content"],
                     )
+                    session_budget.charge(str(turn.get("content", "")))
                     latest_phase = phase
                 else:
                     # Parallel cluster — both agents receive the same transcript
@@ -446,7 +478,25 @@ class DebateManager:
                             phase=phase,
                             content=turn["content"],
                         )
+                        session_budget.charge(str(turn.get("content", "")))
                     latest_phase = cluster[-1]
+
+                # Consensus check: only after discussion/rebuttal clusters, from turn 2+
+                cluster_kinds = {p["kind"] for p in cluster}
+                if cluster_kinds <= {"discussion", "rebuttal"}:
+                    discussion_turns_done += len(cluster)
+                    if discussion_turns_done >= 2 and not session_budget.exhausted:
+                        if await self._detect_consensus(
+                            transcript, cleaned_topic, utility_model, cost_tracker
+                        ):
+                            early_stop_reason = "consensus_reached"
+                            runtime_diary.record(
+                                "backend terminal",
+                                "early consensus",
+                                f"Debate {debate_id[:8]} reached consensus after {len(transcript)} turns.",
+                                session_id=session_id,
+                            )
+                            break
 
                 latest_analysis = self._with_phase_metadata(
                     analyze_debate(cleaned_topic, transcript),
@@ -466,6 +516,17 @@ class DebateManager:
                         "round": latest_analysis["round"],
                         "analysis": latest_analysis,
                     }
+                )
+
+            if early_stop_reason:
+                await self._send_json(
+                    websocket,
+                    {
+                        "type": "early_stop",
+                        "reason": early_stop_reason,
+                        "tokens_used": session_budget.used,
+                        "debate_id": debate_id,
+                    },
                 )
 
             judge_assistant_report = ""
@@ -1792,7 +1853,7 @@ class DebateManager:
         return {
             **session_settings,
             "temperature": float(agent_settings.get("temperature", session_settings.get("temperature", 0.55))),
-            "max_tokens": int(agent_settings.get("max_tokens", session_settings.get("max_tokens", 700))),
+            "max_tokens": int(agent_settings.get("max_tokens", session_settings.get("max_tokens", settings.max_agent_output_tokens))),
             "response_length": str(agent_settings.get("response_length", session_settings.get("response_length", "Normal"))),
             "agent_web_search": bool(agent_settings.get("web_search", False)),
         }
@@ -5288,6 +5349,66 @@ class DebateManager:
         if len(words) <= 8 and not lower.rstrip().endswith("?"):
             return True
         return False
+
+    def _cheap_utility_model(self, fallback: SupportedModel) -> SupportedModel:
+        """Return the cheapest/fastest available model for yes/no utility calls.
+
+        Priority: groq llama-8b-instant > any groq > flash-lite > fallback.
+        """
+        for name in ("llama-3.1-8b-instant", "gemini-2.5-flash-lite", "gemini-2.0-flash"):
+            m = get_available_model(name)
+            if m:
+                return m
+        groq_models = [m for m in available_models() if m.provider == "groq"]
+        if groq_models:
+            return groq_models[-1]  # cheapest first in provider order
+        return fallback
+
+    async def _detect_consensus(
+        self,
+        transcript: list[dict[str, Any]],
+        topic: str,
+        utility_model: SupportedModel,
+        cost_tracker: CostTracker | None,
+    ) -> bool:
+        """Ask cheapest model if the two teams now basically agree. max_tokens=5."""
+        recent = transcript[-6:] if len(transcript) >= 6 else transcript
+        snippets = [
+            f"{t['speaker']}: {str(t.get('content', ''))[-300:]}"
+            for t in recent
+            if t.get("team") in ("pro", "con")
+        ]
+        if len(snippets) < 2:
+            return False
+        route = utility_model.route
+        if settings.mock_llm or acompletion is None or route is None:
+            return False
+        prompt = (
+            f"Debate topic: {topic}\n\n"
+            + "\n".join(snippets)
+            + "\n\nDo Pro and Con now fundamentally agree on the main point? Reply YES or NO only."
+        )
+        try:
+            response = await acompletion(
+                model=route.litellm_model,
+                messages=[{"role": "user", "content": prompt}],
+                api_key=route.api_key,
+                stream=False,
+                temperature=0.0,
+                max_tokens=5,
+                timeout=min(settings.request_timeout_seconds, 15),
+            )
+            text = self._completion_text(response).strip().upper()
+            if cost_tracker is not None:
+                cost_tracker.record_call(
+                    model_name=utility_model.name,
+                    input_text=prompt,
+                    output_text=text,
+                    operation="consensus_check",
+                )
+            return text.startswith("YES")
+        except Exception:
+            return False
 
     def _context_slice(self, transcript: list[dict[str, Any]], context_window: int) -> list[dict[str, Any]]:
         return self._transcript_for_model(
