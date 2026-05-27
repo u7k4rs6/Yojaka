@@ -1,0 +1,7 @@
+{
+  "buildCommand": "echo \"window.YOJAKA_API_BASE='$YOJAKA_API_BASE';\" > frontend-new/api-config.js",
+  "outputDirectory": "frontend-new",
+  "rewrites": [
+    { "source": "/", "destination": "/Yojaka.html" }
+  ]
+}
