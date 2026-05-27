@@ -331,8 +331,8 @@ function BarList({ data }) {
 function DList({ rows }) {
   return (
     <dl className="col gap-2" style={{ margin: 0 }}>
-      {rows.map(([k, v]) => (
-        <div key={k} className="row items-center justify-between" style={{
+      {rows.map(([k, v], i) => (
+        <div key={i} className="row items-center justify-between" style={{
           padding: "6px 0", borderBottom: "0.5px solid var(--hair)",
           fontSize: 11, letterSpacing: "0.08em",
         }}>
