@@ -406,6 +406,10 @@ class Database:
             connection.execute(
                 "ALTER TABLE sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'ai_vs_ai'"
             )
+        if "client_id" not in columns:
+            connection.execute(
+                "ALTER TABLE sessions ADD COLUMN client_id TEXT NOT NULL DEFAULT ''"
+            )
 
     def _ensure_settings_schema(self, connection: sqlite3.Connection) -> None:
         columns = {
@@ -762,14 +766,16 @@ class Database:
                 break
         return cleaned
 
-    def list_sessions(self) -> list[dict]:
+    def list_sessions(self, client_id: str = "") -> list[dict]:
         with self.lock, self.session() as connection:
             rows = connection.execute(
                 """
                 SELECT *
                 FROM sessions
+                WHERE client_id = ?
                 ORDER BY updated_at DESC, created_at DESC
-                """
+                """,
+                (client_id,),
             ).fetchall()
             return [dict(row) for row in rows]
 
@@ -784,19 +790,24 @@ class Database:
         self,
         max_sessions: int,
         *,
+        client_id: str = "",
         mode: str = "ai_vs_ai",
         settings_updates: dict | None = None,
     ) -> dict:
         cleaned_mode = mode if mode in CHAT_MODES else "ai_vs_ai"
         with self.lock, self.session(immediate=True) as connection:
             session_count = connection.execute(
-                "SELECT COUNT(*) AS total FROM sessions"
+                "SELECT COUNT(*) AS total FROM sessions WHERE client_id = ?",
+                (client_id,),
             ).fetchone()["total"]
             if session_count >= max_sessions:
                 raise ValueError("SESSION_LIMIT")
 
             # Monotonic while any chat exists; reset only after the last chat is deleted.
-            if session_count == 0:
+            total_count = connection.execute(
+                "SELECT COUNT(*) AS total FROM sessions"
+            ).fetchone()["total"]
+            if total_count == 0:
                 counter = 0
             else:
                 counter = int(
@@ -811,8 +822,8 @@ class Database:
             session_id = str(uuid4())
             connection.execute(
                 """
-                INSERT INTO sessions (id, name, mode, default_index, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO sessions (id, name, mode, default_index, created_at, updated_at, client_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     session_id,
@@ -821,6 +832,7 @@ class Database:
                     counter,
                     now,
                     now,
+                    client_id,
                 ),
             )
             connection.execute(
@@ -1296,18 +1308,24 @@ class Database:
                 )
             return deleted
 
-    def delete_all_sessions(self) -> int:
+    def delete_all_sessions(self, client_id: str = "") -> int:
         with self.lock, self.session(immediate=True) as connection:
-            deleted = connection.execute("SELECT COUNT(*) AS total FROM sessions").fetchone()["total"]
-            connection.execute("DELETE FROM sessions")
-            connection.execute(
-                """
-                INSERT INTO app_metadata (key, value)
-                VALUES (?, '0')
-                ON CONFLICT(key) DO UPDATE SET value = '0'
-                """,
-                (SESSION_COUNTER_KEY,),
-            )
+            deleted = connection.execute(
+                "SELECT COUNT(*) AS total FROM sessions WHERE client_id = ?",
+                (client_id,),
+            ).fetchone()["total"]
+            connection.execute("DELETE FROM sessions WHERE client_id = ?", (client_id,))
+            # Only reset the counter if no sessions remain globally
+            remaining = connection.execute("SELECT COUNT(*) AS total FROM sessions").fetchone()["total"]
+            if remaining == 0:
+                connection.execute(
+                    """
+                    INSERT INTO app_metadata (key, value)
+                    VALUES (?, '0')
+                    ON CONFLICT(key) DO UPDATE SET value = '0'
+                    """,
+                    (SESSION_COUNTER_KEY,),
+                )
             return int(deleted)
 
     def touch_session(self, session_id: str) -> None:

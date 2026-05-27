@@ -4,11 +4,31 @@
 const API_BASE = (window.YOJAKA_API_BASE || "http://localhost:8000").replace(/\/$/, "");
 const WS_BASE = API_BASE.replace(/^http/, "ws");
 
+// ── Per-browser client identity ────────────────────────────────────
+// Stored in localStorage so the same browser always gets the same ID.
+// This scopes session limits and session lists per browser, not globally.
+function getClientId() {
+  const KEY = "yojaka_client_id";
+  let id = localStorage.getItem(KEY);
+  if (!id) {
+    id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+    localStorage.setItem(KEY, id);
+  }
+  return id;
+}
+const CLIENT_ID = getClientId();
+
 // ── API Client ─────────────────────────────────────────────────────
 
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Client-ID": CLIENT_ID,
+      ...(options.headers || {}),
+    },
     ...options,
   });
   if (res.status === 204) return null;
@@ -260,7 +280,7 @@ function useDebateSocket(sessionId) {
     }
     setWsStatus("connecting");
     setWsError(null);
-    const ws = new WebSocket(`${WS_BASE}/ws/debates/${sid}`);
+    const ws = new WebSocket(`${WS_BASE}/ws/debates/${sid}?client_id=${CLIENT_ID}`);
     wsRef.current = ws;
 
     ws.onopen = () => {

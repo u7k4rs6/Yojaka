@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from .analytics import analyze_debate, session_chart_data
@@ -336,16 +336,20 @@ def get_ai_debater_experiences() -> dict:
 
 
 @app.get("/api/sessions", response_model=list[ChatSession])
-def list_sessions() -> list[dict]:
-    return db.list_sessions()
+def list_sessions(x_client_id: str = Header(default="")) -> list[dict]:
+    return db.list_sessions(client_id=x_client_id)
 
 
 @app.post("/api/sessions", response_model=ChatSession, status_code=201)
-def create_session(payload: CreateSessionRequest | None = None) -> dict:
+def create_session(
+    payload: CreateSessionRequest | None = None,
+    x_client_id: str = Header(default=""),
+) -> dict:
     try:
         body = payload or CreateSessionRequest()
         return db.create_session(
             settings.max_sessions,
+            client_id=x_client_id,
             mode=body.mode,
             settings_updates=body.settings or None,
         )
@@ -359,8 +363,8 @@ def create_session(payload: CreateSessionRequest | None = None) -> dict:
 
 
 @app.delete("/api/sessions")
-def delete_all_sessions() -> dict:
-    deleted = db.delete_all_sessions()
+def delete_all_sessions(x_client_id: str = Header(default="")) -> dict:
+    deleted = db.delete_all_sessions(client_id=x_client_id)
     return {"deleted": deleted}
 
 
