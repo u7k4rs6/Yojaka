@@ -295,156 +295,108 @@ function Waveform({ active }) {
   );
 }
 
+// Smooth typewriter: drains the incoming token stream at a steady ~60fps pace.
+// Speed adapts: catches up when lagging, slows to 2 chars/frame when caught up.
+function useTypewriter(target, active) {
+  const [shown, setShown] = useState(() => active ? "" : target);
+  const posRef    = useRef(active ? 0 : (target ? target.length : 0));
+  const targetRef = useRef(target);
+
+  useEffect(() => { targetRef.current = target; });
+
+  useEffect(() => {
+    if (!active) {
+      setShown(targetRef.current);
+      posRef.current = targetRef.current.length;
+      return;
+    }
+    posRef.current = 0;
+    setShown("");
+    const id = setInterval(() => {
+      const t   = targetRef.current;
+      const pos = posRef.current;
+      if (pos >= t.length) return;
+      const lag  = t.length - pos;
+      const step = lag > 300 ? 10 : lag > 80 ? 5 : 2;
+      const next = Math.min(t.length, pos + step);
+      posRef.current = next;
+      setShown(t.slice(0, next));
+    }, 16);
+    return () => clearInterval(id);
+  }, [active]);
+
+  return shown;
+}
+
 function MessageBlock({ message, streaming }) {
   const isPro = message.side === "PRO";
-  const [hoverCite, setHoverCite] = useState(null);
+  const isNeu = message.side === "NEU" || message.side === "SYS";
 
   const body = message.body || "";
 
-  // Track if this component was ever live-streaming.
-  // If so, skip compile animation — the token stream already revealed the text.
   const everLiveRef = useRef(streaming);
   if (streaming) everLiveRef.current = true;
-  const skipAnim = everLiveRef.current;
+  const wasLive = everLiveRef.current;
 
-  // Compile animation only for historical messages (never streaming).
-  // Pass "" when skipAnim so fullText never changes and the hook stays idle.
-  const { stage, shown } = useCompileStream(skipAnim ? "" : body, {
-    speed: 8, blockDuration: 50, key: message.id,
-    autoStart: !skipAnim && body.length > 0 && body.length < 600,
-  });
+  const typeText    = useTypewriter(body, streaming);
+  const displayText = wasLive ? typeText : body;
+  const showCursor  = streaming || (wasLive && typeText.length < body.length);
 
-  // Streaming → raw token accumulation displayed directly (no animation)
-  // Historical short msg → compile blocks then typing
-  // Everything else → full body immediately
-  const showBlocks  = !skipAnim && stage === "blocks" && body.length > 0;
-  const displayText = skipAnim        ? body
-    : stage === "typing"              ? shown
-    : body;
-  const showCursor  = streaming || (!skipAnim && (stage === "blocks" || stage === "typing"));
-
-  const isFinal = !streaming;
+  const accentColor  = isPro ? "var(--bone)" : isNeu ? "var(--bone-2)" : "var(--orange)";
+  const accentBorder = isPro ? "var(--hair-hot)" : isNeu ? "var(--hair)" : "var(--orange-dim)";
+  const accentBg     = isPro ? "rgba(232,230,223,0.04)" : isNeu ? "transparent" : "rgba(255,78,0,0.06)";
 
   return (
-    <article className={`relative ${isPro ? "sm-side-pro" : "sm-side-con"}`} style={{
-      padding: "14px 18px",
-      background: isPro ? "var(--void-2)" : "linear-gradient(90deg, rgba(255,78,0,0.05), var(--void-2) 30%)",
-      marginLeft: isPro ? 0 : 60,
-      marginRight: isPro ? 60 : 0,
-      borderTop: "0.5px solid var(--hair)",
+    <article style={{
+      padding: "12px 18px",
       borderBottom: "0.5px solid var(--hair)",
+      background: isNeu
+        ? "linear-gradient(90deg, rgba(232,230,223,0.03), transparent 60%)"
+        : isPro
+          ? "var(--void-2)"
+          : "linear-gradient(90deg, rgba(255,78,0,0.04), var(--void-2) 40%)",
+      marginLeft:  isPro ? 0 : isNeu ? 30 : 60,
+      marginRight: isPro ? 60 : isNeu ? 30 : 0,
     }}>
-      <header className="row items-center justify-between gap-3" style={{ marginBottom: 10 }}>
-        <div className="row items-center gap-2">
-          {/* Team pill */}
-          <span style={{
-            fontSize: 9, letterSpacing: "0.22em", fontWeight: 700,
-            padding: "2px 6px",
-            color: isPro ? "var(--bone)" : "var(--orange)",
-            border: `0.5px solid ${isPro ? "var(--hair-hot)" : "var(--orange-dim)"}`,
-            background: isPro ? "rgba(232,230,223,0.06)" : "rgba(255,78,0,0.08)",
-          }}>
-            {message.side}
+      <header className="row items-center gap-2" style={{ marginBottom: 8 }}>
+        <span style={{
+          fontSize: 9, letterSpacing: "0.22em", fontWeight: 700,
+          padding: "2px 6px", flexShrink: 0,
+          color: accentColor, border: `0.5px solid ${accentBorder}`, background: accentBg,
+        }}>
+          {message.side}
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 500, color: "var(--bone)", letterSpacing: "0.04em" }}>
+          {message.speaker}
+        </span>
+        <span style={{ fontSize: 9, letterSpacing: "0.12em", color: "var(--bone-4)" }}>
+          {message.role}
+        </span>
+        <span style={{ flex: 1 }} />
+        <span className="mono-mini bone-3" style={{ fontSize: 9 }}>{message.time}</span>
+        {streaming && (
+          <span style={{ fontSize: 9, letterSpacing: "0.18em", color: "var(--orange)", animation: "cursor-blink 1.1s step-end infinite" }}>
+            LIVE
           </span>
-          <span className="bone" style={{ fontSize: 12, letterSpacing: "0.04em", fontWeight: 500 }}>{message.speaker}</span>
-          <span className={`mono-mini ${isPro ? "bone-3" : ""}`} style={{ fontSize: 9, letterSpacing: "0.14em", color: isPro ? "var(--bone-3)" : "var(--orange-dim)" }}>
-            {message.role}
-          </span>
-        </div>
-        <div className="row items-center gap-3">
-          <span className="mono-mini bone-3">{message.time}</span>
-          {streaming && (
-            <span className="sm-tag sm-tag--hot" style={{ animation: "cursor-blink 1.1s step-end infinite" }}>
-              LIVE
-            </span>
-          )}
-        </div>
+        )}
       </header>
 
-      <div style={{
-        fontSize: 13.5, lineHeight: 1.65, color: "var(--bone)",
-        letterSpacing: "0.002em", whiteSpace: "pre-wrap",
-      }}>
-        {showBlocks ? (
-          <CompileBlocks length={Math.min(120, body.length || 40)} />
-        ) : (
-          <React.Fragment>
-            {displayText}
-            {showCursor ? <span className={`sm-cursor ${isPro ? "" : "sm-cursor--hot"}`} /> : null}
-          </React.Fragment>
-        )}
+      <div style={{ fontSize: 13.5, lineHeight: 1.7, color: "var(--bone)", letterSpacing: "0.002em", whiteSpace: "pre-wrap" }}>
+        {displayText}
+        {showCursor && <span className={`sm-cursor${isPro ? "" : " sm-cursor--hot"}`} />}
       </div>
 
-      {message.citations?.length > 0 && isFinal ? (
-        <div className="row gap-2" style={{ marginTop: 12, flexWrap: "wrap", position: "relative" }}>
-          {message.citations.map(c => (
-            <Citation
-              key={c.id}
-              cite={c}
-              active={hoverCite === c.id}
-              onEnter={() => setHoverCite(c.id)}
-              onLeave={() => setHoverCite(null)}
-              parentSide={message.side}
-            />
-          ))}
-          <span className="mono-mini bone-3" style={{ marginLeft: "auto", alignSelf: "center" }}>
-            {Math.round((message.body || "").length / 4)} tok
+      {!streaming && body && (
+        <div className="row" style={{ marginTop: 8 }}>
+          <span className="mono-mini bone-4" style={{ marginLeft: "auto", fontSize: 9 }}>
+            ~{Math.round(body.length / 4)} tok
           </span>
         </div>
-      ) : isFinal && message.body ? (
-        <div className="row" style={{ marginTop: 10 }}>
-          <span className="mono-mini bone-3" style={{ marginLeft: "auto" }}>
-            {Math.round(message.body.length / 4)} tok
-          </span>
-        </div>
-      ) : null}
+      )}
     </article>
   );
 }
 
-function CompileBlocks({ length }) {
-  return (
-    <span>
-      {Array.from({ length }).map((_, i) => (
-        <span key={i} className="sm-compile-block" style={{ animationDelay: `${i % 8 * 60}ms` }} />
-      ))}
-    </span>
-  );
-}
-
-function Citation({ cite, active, onEnter, onLeave, parentSide }) {
-  return (
-    <span
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-      style={{
-        position: "relative",
-        fontSize: 10, letterSpacing: "0.12em",
-        padding: "2px 8px",
-        color: parentSide === "PRO" ? "var(--bone)" : "var(--orange)",
-        border: `0.5px solid ${parentSide === "PRO" ? "var(--hair-hot)" : "var(--orange-dim)"}`,
-        background: "var(--void-3)",
-        cursor: "help",
-      }}
-    >
-      [{cite.id?.toUpperCase() || "REF"}] {(cite.label || "").slice(0, 28)}{(cite.label || "").length > 28 ? "…" : ""}
-      {active && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 14px)", left: 0,
-          width: 280, zIndex: 30, padding: "10px 12px",
-          background: "var(--void)", border: "0.5px solid var(--orange-dim)",
-          clipPath: "var(--clip-panel-sm)", color: "var(--bone)",
-          fontSize: 11, letterSpacing: "0.04em", lineHeight: 1.5,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.6)", pointerEvents: "none",
-        }}>
-          <div className="mono-mini hot" style={{ marginBottom: 4 }}>{cite.id?.toUpperCase()}</div>
-          <div style={{ marginBottom: 4 }}>{cite.label}</div>
-          {cite.url && <div className="bone-3 mono-mini">{cite.url}</div>}
-        </div>
-      )}
-    </span>
-  );
-}
 
 function PendingCompose({ nextSpeaker }) {
   return (
