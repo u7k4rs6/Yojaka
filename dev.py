@@ -6,25 +6,11 @@ import sys
 import time
 from pathlib import Path
 
-
-PROJECT_ROOT = Path(__file__).resolve().parent
-
-
-def venv_python() -> str:
-    for venv_dir in (".venv", "venv"):
-        if os.name == "nt":
-            candidate = PROJECT_ROOT / venv_dir / "Scripts" / "python.exe"
-        else:
-            candidate = PROJECT_ROOT / venv_dir / "bin" / "python"
-        if candidate.exists():
-            return str(candidate)
-    if os.name == "nt":
-        return str(PROJECT_ROOT / ".venv" / "Scripts" / "python.exe")
-    return str(PROJECT_ROOT / ".venv" / "bin" / "python")
-
-
-def npm_command() -> str:
-    return "npm.cmd" if os.name == "nt" else "npm"
+# Use CWD as project root — dev.py is always run from the project directory.
+# Avoid Path(__file__).resolve() which can follow unexpected symlinks.
+PROJECT_ROOT = Path.cwd()
+FRONTEND_DIR = PROJECT_ROOT / "frontend-new"
+VENV_PYTHON  = PROJECT_ROOT / ".venv" / "bin" / "python"
 
 
 def stop_process(process: subprocess.Popen[bytes] | None) -> None:
@@ -38,50 +24,59 @@ def stop_process(process: subprocess.Popen[bytes] | None) -> None:
 
 
 def main() -> int:
-    python = venv_python()
-    if not Path(python).exists():
-        print("Could not find the virtual-environment Python. Create .venv first.", file=sys.stderr)
+    if not VENV_PYTHON.exists():
+        print(
+            f"Virtual-environment not found at {VENV_PYTHON}\n"
+            "Create it first:\n"
+            "  python3 -m venv .venv\n"
+            "  .venv/bin/pip install -r backend/requirements.txt",
+            file=sys.stderr,
+        )
         return 1
 
     backend_cmd = [
-        python,
-        "-m",
-        "uvicorn",
+        str(VENV_PYTHON),
+        "-m", "uvicorn",
         "backend.app.main:app",
         "--reload",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "8000",
+        "--host", "127.0.0.1",
+        "--port", "8000",
     ]
-    frontend_cmd = [npm_command(), "run", "dev", "--", "-p", "6001"]
+
+    # Static frontend served by Python's built-in HTTP server (no Node.js needed).
+    frontend_cmd = [
+        sys.executable,
+        "-m", "http.server", "6001",
+        "--directory", str(FRONTEND_DIR),
+    ]
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
 
     print("Starting Yojaka — Multi-Agent Strategic Intelligence Platform...")
-    print("Backend:  http://127.0.0.1:8000")
-    print("Frontend: http://127.0.0.1:6001")
-    print("Press Ctrl+C once to stop both processes.\n")
+    print(f"Backend:  http://127.0.0.1:8000")
+    print(f"Frontend: http://127.0.0.1:6001/Yojaka.html")
+    print(f"Venv:     {VENV_PYTHON}")
+    print("Press Ctrl+C once to stop.\n")
 
-    backend = subprocess.Popen(backend_cmd, cwd=PROJECT_ROOT, env=env)
-    frontend = subprocess.Popen(frontend_cmd, cwd=PROJECT_ROOT / "frontend", env=env)
+    backend  = subprocess.Popen(backend_cmd, cwd=str(PROJECT_ROOT), env=env)
+    frontend = subprocess.Popen(frontend_cmd, cwd=str(PROJECT_ROOT), env=env)
 
     try:
         while True:
-            backend_code = backend.poll()
-            frontend_code = frontend.poll()
-            if backend_code is not None:
-                print(f"Backend exited with code {backend_code}. Stopping frontend...")
+            bc = backend.poll()
+            fc = frontend.poll()
+            if bc is not None:
+                print(f"Backend exited ({bc}). Stopping frontend...")
                 stop_process(frontend)
-                return backend_code
-            if frontend_code is not None:
-                print(f"Frontend exited with code {frontend_code}. Stopping backend...")
+                return bc
+            if fc is not None:
+                print(f"Frontend exited ({fc}). Stopping backend...")
                 stop_process(backend)
-                return frontend_code
+                return fc
             time.sleep(0.5)
     except KeyboardInterrupt:
-        print("\nStopping both processes...")
+        print("\nStopping...")
         stop_process(frontend)
         stop_process(backend)
         return 0
