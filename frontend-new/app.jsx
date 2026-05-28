@@ -197,9 +197,9 @@ function App() {
 
   return (
     <div className="row" style={{ height: "100vh", width: "100vw", position: "relative", overflow: "hidden" }}>
-      <div className="sm-grid-noise" />
-      <div className="sm-scanline" />
-      <div className="sm-vignette" />
+      <div aria-hidden="true" className="sm-grid-noise" />
+      <div aria-hidden="true" className="sm-scanline" />
+      <div aria-hidden="true" className="sm-vignette" />
       <Globe />
 
       <Sidebar

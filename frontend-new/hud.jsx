@@ -7,10 +7,10 @@ const { useEffect, useState, useRef, useMemo, useCallback, createContext, useCon
 function RegMarks({ active = false }) {
   return (
     <React.Fragment>
-      <span className="sm-reg tl sm-reg-pulse" style={{ "--reg-period": "6.3s" }}>┌</span>
-      <span className="sm-reg tr sm-reg-pulse" style={{ "--reg-period": "7.7s" }}>┐</span>
-      <span className="sm-reg bl sm-reg-pulse" style={{ "--reg-period": "8.1s" }}>└</span>
-      <span className="sm-reg br sm-reg-pulse" style={{ "--reg-period": "6.9s" }}>┘</span>
+      <span aria-hidden="true" className="sm-reg tl sm-reg-pulse" style={{ "--reg-period": "6.3s" }}>┌</span>
+      <span aria-hidden="true" className="sm-reg tr sm-reg-pulse" style={{ "--reg-period": "7.7s" }}>┐</span>
+      <span aria-hidden="true" className="sm-reg bl sm-reg-pulse" style={{ "--reg-period": "8.1s" }}>└</span>
+      <span aria-hidden="true" className="sm-reg br sm-reg-pulse" style={{ "--reg-period": "6.9s" }}>┘</span>
     </React.Fragment>
   );
 }

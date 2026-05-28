@@ -18,7 +18,7 @@ function DashboardView({ onNewSession, sessions, models, providers }) {
     <div className="col full" style={{ overflowY: "auto" }}>
       {/* Hero */}
       <div className="col" style={{ padding: "48px 32px 24px", borderBottom: "0.5px solid var(--hair)", position: "relative" }}>
-        <div className="row items-center gap-3" style={{ marginBottom: 12 }}>
+        <div aria-hidden="true" className="row items-center gap-3" style={{ marginBottom: 12 }}>
           <span className="sm-tag sm-tag--hot">SITREP</span>
           <span className="mono-mini bone-3">OPERATOR · CLEARANCE 3</span>
           <span className="mono-mini bone-3">·</span>

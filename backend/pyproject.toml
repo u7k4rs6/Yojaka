@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yojaka-backend"
+version = "2.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    # API / ASGI
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "websockets>=12.0",
+    # ORM / DB
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.13",
+    "aiosqlite",
+    "asyncpg",
+    # HTTP client
+    "httpx>=0.27",
+    # Validation
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    # Vector (dev)
+    "faiss-cpu",
+    # Cache (dev)
+    "cachetools",
+    # Cache (prod)
+    "redis[asyncio]>=5",
+    # Providers
+    "google-generativeai>=0.8",
+    "groq>=0.9",
+    "openai>=1.30",
+    "anthropic>=0.25",
+    # Observability
+    "prometheus-client>=0.20",
+    # Utilities
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "httpx",
+    "anyio[trio]",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*", "api*", "core*", "agents*", "providers*", "memory*", "budget*", "analytics*", "events*", "repositories*", "storage*", "prompts*", "observability*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -94,7 +94,7 @@ function Sidebar({ sessions, selectedId, view, onSelect, onView, onNewSession })
           label="System Settings"
           meta="CFG"
         />
-        <div className="row items-center justify-between" style={{ padding: "10px 14px 6px", borderTop: "0.5px solid var(--hair)", marginTop: 6 }}>
+        <div aria-hidden="true" className="row items-center justify-between" style={{ padding: "10px 14px 6px", borderTop: "0.5px solid var(--hair)", marginTop: 6 }}>
           <div className="col">
             <span className="mono-mini bone-3">OPERATOR</span>
             <span className="bone" style={{ fontSize: 11, letterSpacing: "0.08em" }}>OP-7F · ALPHA</span>
@@ -121,10 +121,10 @@ function SectionLabel({ text, right }) {
 function SideRow({ active, onClick, icon, label, meta }) {
   return (
     <button onClick={onClick} className={`sm-side-item ${active ? "active" : ""}`} style={{ width: "100%" }}>
-      <span className="br-l br-inline">[</span>
-      <span style={{ width: 14, textAlign: "center", color: active ? "var(--orange)" : "var(--bone-3)", flexShrink: 0 }}>{icon}</span>
+      <span aria-hidden="true" className="br-l br-inline">[</span>
+      <span aria-hidden="true" style={{ width: 14, textAlign: "center", color: active ? "var(--orange)" : "var(--bone-3)", flexShrink: 0 }}>{icon}</span>
       <span className="label">{label}</span>
-      <span className="br-r br-inline">]</span>
+      <span aria-hidden="true" className="br-r br-inline">]</span>
       <span className="meta">{meta}</span>
     </button>
   );
@@ -140,7 +140,7 @@ function SessionRow({ session, active, onClick }) {
                                     "var(--bone-3)";
   return (
     <button onClick={onClick} className={`sm-side-item ${active ? "active" : ""}`} style={{ width: "100%", padding: "10px 12px 10px 18px" }}>
-      <span className="br-l">[</span>
+      <span aria-hidden="true" className="br-l">[</span>
       <span className="col flex-1" style={{ alignItems: "flex-start", overflow: "hidden", gap: 2 }}>
         <span className="row items-center gap-2" style={{ width: "100%" }}>
           <span className="mono-mini" style={{ color: statusColor, letterSpacing: "0.18em" }}>
@@ -161,7 +161,7 @@ function SessionRow({ session, active, onClick }) {
           {session.phase}{isQueued ? " · QUEUED" : ""}
         </span>
       </span>
-      <span className="br-r">]</span>
+      <span aria-hidden="true" className="br-r">]</span>
     </button>
   );
 }

@@ -51,3 +51,6 @@ electron/.frontend-bundle/
 # Test artifacts
 .playwright-mcp/
 *.png
+
+# Python build artifacts
+*.egg-info/
