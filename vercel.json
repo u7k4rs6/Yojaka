@@ -2,7 +2,7 @@
   "buildCommand": "cd frontend-new && npm install && npm run build",
   "outputDirectory": "frontend-new/dist",
   "rewrites": [
-    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
